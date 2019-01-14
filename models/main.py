@@ -155,8 +155,8 @@ def setup_clients(dataset, model=None):
     Return:
         all_clients: list of Client objects.
     """
-    train_data_dir = os.path.join('..', 'data', dataset, 'data', 'train')
-    test_data_dir = os.path.join('..', 'data', dataset, 'data', 'test')
+    train_data_dir = os.path.join('/dataset/hzy/FedLearning', 'data', dataset, 'data', 'train')
+    test_data_dir = os.path.join('/dataset/hzy/FedLearning', 'data', dataset, 'data', 'test')
 
     users, groups, train_data, test_data = read_data(train_data_dir, test_data_dir)
     if len(groups) == 0:

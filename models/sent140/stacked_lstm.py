@@ -9,7 +9,7 @@ from model import Model
 from utils.language_utils import line_to_indices, get_word_emb_arr, val_to_vec
 
 
-VOCAB_DIR = 'sent140/embs.json'
+VOCAB_DIR = '/dataset/hzy/FedLearning/data/sent140/embs.json'
 
 
 class ClientModel(Model):

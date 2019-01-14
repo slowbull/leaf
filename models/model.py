@@ -22,7 +22,10 @@ class Model(ABC):
         with self.graph.as_default():
             self.features, self.labels, self.train_op, self.eval_metric_ops = self.create_model()
             self.saver = tf.train.Saver()
-        self.sess = tf.Session(graph=self.graph)
+
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth=True
+        self.sess = tf.Session(graph=self.graph, config=config)
 
         self.size = graph_size(self.graph)
 
