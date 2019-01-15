@@ -72,12 +72,14 @@ class Model(ABC):
             update: List of np.ndarray weights, with each weight array
                 corresponding to a variable in the resulting graph
         """
-        self.init_values = {}
+	    # intialize as server model.
+        with self.graph.as_default():
+            all_vars = tf.trainable_variables()
+            for v in all_vars:
+                v.load(self.init_vals[v.name], self.sess)
+
         with self.graph.as_default():
             init_values = [self.sess.run(v) for v in tf.trainable_variables()]
-            # for exp only
-            for v in tf.trainable_variables():
-                self.init_values[v.name] = self.sess.run(v)
 
         batched_x, batched_y = batch_data(data, batch_size)
         for _ in range(num_epochs):
@@ -95,44 +97,6 @@ class Model(ABC):
             update = [np.subtract(update[i], init_values[i]) for i in range(len(update))]
         comp = num_epochs * len(batched_y) * batch_size * self.flops
         return comp, update
-
-
-    def pseudo_train(self, data):
-        """
-        simulate mini-batch sgd in the client model.
-
-        Args:
-            data: Dict of the form {'x': [list], 'y': [list]}.
-        Return:
-            comp: Number of FLOPs computed while training given data
-            update: List of np.ndarray weights, with each weight array
-                corresponding to a variable in the resulting graph
-        """
-        with self.graph.as_default():
-            init_values = self.init_values
-			all_vars = tf.trainable_variables()
-            for v in all_vars:
-                v.load(init_values[v.name], self.sess)
-
-        num_epochs = 1
-		batch_size = len(data['y'])
-        batched_x, batched_y = batch_data(data, batch_size)
-        for _ in range(num_epochs):
-            for i, raw_x_batch in enumerate(batched_x):
-                input_data = self.process_x(raw_x_batch)
-                raw_y_batch = batched_y[i]
-                target_data = self.process_y(raw_y_batch)
-                with self.graph.as_default():
-                    self.sess.run(
-                        self.train_op,
-						feed_dict={self.features: input_data, self.labels: target_data, self.is_train:True}
-                    )
-        with self.graph.as_default():
-            update = [self.sess.run(v) for v in tf.trainable_variables()]
-            update = [np.subtract(update[i], init_values[i]) for i in range(len(update))]
-        comp = num_epochs * len(batched_y) * batch_size * self.flops
-        return comp, update
-
 
     def test(self, data):
         """
@@ -189,7 +153,9 @@ class ServerModel:
             for v in all_vars:
                 val = self.model.sess.run(v)
                 var_vals[v.name] = val
+
         for c in clients:
+            c.model.init_vals = var_vals
             with c.model.graph.as_default():
                 all_vars = tf.trainable_variables()
                 for v in all_vars:
