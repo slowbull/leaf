@@ -1,5 +1,5 @@
 import random
-
+import pickle
 
 from baseline_constants import BYTES_WRITTEN_KEY, BYTES_READ_KEY, LOCAL_COMPUTATIONS_KEY
 
@@ -49,6 +49,7 @@ class Server:
             bytes_read: number of bytes read by each client from server
                 dictionary with client ids as keys and integer values.
         """
+        self.updates = []
         if clients is None:
             clients = self.selected_clients
         sys_metrics = {
@@ -69,6 +70,18 @@ class Server:
     def update_model(self):
         self.model.update(self.updates)
         self.updates = []
+
+
+    def save_update(self, filename):
+        with open(filename, 'wb') as f:
+            pickle.dump(self.updates, f)
+
+
+    def save_model(self, filename):
+        init_values = self.model.get_model()
+        with open(filename, 'wb') as f:
+            pickle.dump(init_values, f)
+
 
     def test_model(self, clients_to_test=None):
         """Tests self.model on given clients.

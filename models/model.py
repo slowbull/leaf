@@ -190,3 +190,8 @@ class ServerModel:
 
     def close(self):
         self.model.close()
+
+    def get_model(self):
+        with self.model.graph.as_default():
+            init_values = [self.model.sess.run(v) for v in tf.trainable_variables()] 
+        return init_values
