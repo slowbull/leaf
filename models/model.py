@@ -6,7 +6,7 @@ import os
 import sys
 import tensorflow as tf
 
-from baseline_constants import ACCURACY_KEY
+from baseline_constants import ACCURACY_KEY, LOSS_KEY
 
 from utils.model_utils import batch_data
 from utils.tf_utils import graph_size
@@ -20,7 +20,7 @@ class Model(ABC):
 
         self.graph = tf.Graph()
         with self.graph.as_default():
-            self.features, self.labels, self.train_op, self.eval_metric_ops = self.create_model()
+            self.features, self.labels, self.is_train, self.train_op, self.eval_metric_ops, self.loss = self.create_model()
             self.saver = tf.train.Saver()
 
         config = tf.ConfigProto()
@@ -72,8 +72,12 @@ class Model(ABC):
             update: List of np.ndarray weights, with each weight array
                 corresponding to a variable in the resulting graph
         """
+        self.init_values = {}
         with self.graph.as_default():
             init_values = [self.sess.run(v) for v in tf.trainable_variables()]
+            # for exp only
+            for v in tf.trainable_variables():
+                self.init_values[v.name] = self.sess.run(v)
 
         batched_x, batched_y = batch_data(data, batch_size)
         for _ in range(num_epochs):
@@ -84,13 +88,51 @@ class Model(ABC):
                 with self.graph.as_default():
                     self.sess.run(
                         self.train_op,
-                        feed_dict={self.features: input_data, self.labels: target_data}
+						feed_dict={self.features: input_data, self.labels: target_data, self.is_train:True}
                     )
         with self.graph.as_default():
             update = [self.sess.run(v) for v in tf.trainable_variables()]
             update = [np.subtract(update[i], init_values[i]) for i in range(len(update))]
         comp = num_epochs * len(batched_y) * batch_size * self.flops
         return comp, update
+
+
+    def pseudo_train(self, data):
+        """
+        simulate mini-batch sgd in the client model.
+
+        Args:
+            data: Dict of the form {'x': [list], 'y': [list]}.
+        Return:
+            comp: Number of FLOPs computed while training given data
+            update: List of np.ndarray weights, with each weight array
+                corresponding to a variable in the resulting graph
+        """
+        with self.graph.as_default():
+            init_values = self.init_values
+			all_vars = tf.trainable_variables()
+            for v in all_vars:
+                v.load(init_values[v.name], self.sess)
+
+        num_epochs = 1
+		batch_size = len(data['y'])
+        batched_x, batched_y = batch_data(data, batch_size)
+        for _ in range(num_epochs):
+            for i, raw_x_batch in enumerate(batched_x):
+                input_data = self.process_x(raw_x_batch)
+                raw_y_batch = batched_y[i]
+                target_data = self.process_y(raw_y_batch)
+                with self.graph.as_default():
+                    self.sess.run(
+                        self.train_op,
+						feed_dict={self.features: input_data, self.labels: target_data, self.is_train:True}
+                    )
+        with self.graph.as_default():
+            update = [self.sess.run(v) for v in tf.trainable_variables()]
+            update = [np.subtract(update[i], init_values[i]) for i in range(len(update))]
+        comp = num_epochs * len(batched_y) * batch_size * self.flops
+        return comp, update
+
 
     def test(self, data):
         """
@@ -104,12 +146,12 @@ class Model(ABC):
         x_vecs = self.process_x(data['x'])
         labels = self.process_y(data['y'])
         with self.graph.as_default():
-            tot_acc = self.sess.run(
-                self.eval_metric_ops,
-                feed_dict={self.features: x_vecs, self.labels: labels}
+            tot_acc, tot_loss = self.sess.run(
+                [self.eval_metric_ops, self.loss],
+                feed_dict={self.features: x_vecs, self.labels: labels, self.is_train:False}
             )
         acc = float(tot_acc) / x_vecs.shape[0]
-        return {ACCURACY_KEY: acc}
+        return {ACCURACY_KEY: acc, LOSS_KEY: tot_loss}
 
     def close(self):
         self.sess.close()

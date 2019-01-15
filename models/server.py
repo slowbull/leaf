@@ -85,7 +85,15 @@ class Server:
         self.model.send_to(clients_to_test)
         
         for client in clients_to_test:
-            c_metrics = client.test(self.model.cur_model)
+            c_metrics_train = client.test(self.model.cur_model, train=True)
+            c_metrics_test = client.test(self.model.cur_model, train=False)
+
+            c_metrics = {}
+            for key, val in c_metrics_train.items():
+                c_metrics['train_'+key] = val
+            for key, val in c_metrics_test.items():
+                c_metrics['test_'+key] = val
+
             metrics[client.id] = c_metrics
 
         return metrics

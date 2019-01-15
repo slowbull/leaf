@@ -37,13 +37,17 @@ class Client:
         num_train_samples = len(data)
         return comp, num_train_samples, update
 
-    def test(self, model):
+    def test(self, model, train=True):
         """Tests self.model on self.eval_data.
 
         Return:
             dict of metrics returned by the model.
         """
-        return model.test(self.eval_data)
+        if train:
+            return model.test(self.train_data)
+        else:
+            return model.test(self.eval_data)
+
 
     @property
     def num_test_samples(self):

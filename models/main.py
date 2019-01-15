@@ -59,15 +59,17 @@ def main():
     clients = setup_clients(args.dataset, client_model)
     print('%d Clients in Total' % len(clients))
 
+    print('Rounds Train_acc_avg  p_10  p_90  Train_loss_avg  p_10  p_90  Test_acc_avg  p_10 p_90  Test_loss_avg  p_10 p_90')
     # Test untrained model on all clients
     stat_metrics = server.test_model(clients)
     all_ids, all_groups, all_num_samples = server.get_clients_test_info(clients)
     metrics_writer.print_metrics(0, all_ids, stat_metrics, all_groups, all_num_samples, STAT_METRICS_PATH)
-    print_metrics(stat_metrics, all_num_samples)
+    print_metrics(stat_metrics, all_num_samples, 0)
+
 
     # Simulate training
     for i in range(num_rounds):
-        print('--- Round %d of %d: Training %d Clients ---' % (i+1, num_rounds, clients_per_round))
+        #print('--- Round %d of %d: Training %d Clients ---' % (i+1, num_rounds, clients_per_round))
 
         # Select clients to train this round
         server.select_clients(online(clients), num_clients=clients_per_round)
@@ -84,7 +86,7 @@ def main():
         if (i + 1) % eval_every == 0 or (i + 1) == num_rounds:
             stat_metrics = server.test_model(clients)
             metrics_writer.print_metrics(i, all_ids, stat_metrics, all_groups, all_num_samples, STAT_METRICS_PATH)
-            print_metrics(stat_metrics, all_num_samples)
+            print_metrics(stat_metrics, all_num_samples, i+1)
 
     # Save server model
     save_model(server_model, args.dataset, args.model)
@@ -175,7 +177,7 @@ def save_model(server_model, dataset, model):
     print('Model saved in path: %s' % save_path)
 
 
-def print_metrics(metrics, weights):
+def print_metrics(metrics, weights, rounds):
     """Prints weighted averages of the given metrics.
 
     Args:
@@ -186,14 +188,20 @@ def print_metrics(metrics, weights):
     """
     ordered_weights = [weights[c] for c in sorted(weights)]
     metric_names = metrics_writer.get_metrics_names(metrics)
+    print('{} '.format(rounds), end='')
     for metric in metric_names:
         ordered_metric = [metrics[c][metric] for c in sorted(metrics)]
-        print('%s: %g, 10th percentile: %g, 90th percentile %g' \
-              % (metric,
+        #print('%s: %g, 10th percentile: %g, 90th percentile %g' \
+        #      % (metric,
+        #         np.average(ordered_metric, weights=ordered_weights),
+        #         np.percentile(ordered_metric, 10),
+        #         np.percentile(ordered_metric, 90)))
+        print('{:.4f}   {:.4f}   {:.4f} '.format(\
                  np.average(ordered_metric, weights=ordered_weights),
                  np.percentile(ordered_metric, 10),
-                 np.percentile(ordered_metric, 90)))
+                 np.percentile(ordered_metric, 90)), end='')
 
+    print(' ')
 
 if __name__ == '__main__':
     main()
