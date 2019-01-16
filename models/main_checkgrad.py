@@ -13,6 +13,7 @@ from baseline_constants import MAIN_PARAMS, MODEL_PARAMS, SIM_TIMES
 from client import Client
 from server import Server
 from model import ServerModel
+from model_mom import ServerModel as ServerModel_mom
 
 from utils.constants import DATASETS
 from utils.model_utils import read_data
@@ -29,6 +30,10 @@ def main():
     if not os.path.exists(model_path):
         print('Please specify a valid dataset and a valid model.')
     model_path = '%s.%s' % (args.dataset, args.model)
+
+    save_path = os.path.join('/dataset/hzy/FedLearning/result/checkpoints', args.save_path)
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
     
     print('############################## %s ##############################' % model_path)
     mod = importlib.import_module(model_path)
@@ -50,7 +55,11 @@ def main():
         model_params = tuple(model_params_list)
     tf.reset_default_graph()
     client_model = ClientModel(*model_params)
-    server_model = ServerModel(ClientModel(*model_params))
+    if args.mom == 0:
+        server_model = ServerModel(ClientModel(*model_params))
+    else:
+        server_model = ServerModel_mom(ClientModel(*model_params))
+
 
     # Create server
     server = Server(server_model)
@@ -78,13 +87,20 @@ def main():
 
         # simulate mini_batch grad
         _ = server.train_model(num_epochs=args.num_epochs, batch_size=args.batch_size, minibatch=1.0)
-        server.save_update(i, 'fedsgd')
+        if (i) % eval_every == 0 or (i + 1) == num_rounds:
+            filename = os.path.join(save_path, 'fedsgd_'+str(i))
+            server.save_update(filename)
+            filename = os.path.join(save_path, 'model_'+str(i))
+            server.save_model(filename)
+            
 
         # Simulate server model training on selected clients' data
         sys_metics = server.train_model(num_epochs=args.num_epochs, batch_size=args.batch_size, minibatch=args.minibatch)
         metrics_writer.print_metrics(i, c_ids, sys_metics, c_groups, c_num_samples, SYS_METRICS_PATH)
 
-        server.save_update(i, 'fedavg')
+        if (i) % eval_every == 0 or (i + 1) == num_rounds:
+            filename = os.path.join(save_path, 'fedavg_'+str(i))
+            server.save_update(filename)
 
         # Update server model
         server.update_model()
@@ -96,7 +112,7 @@ def main():
             print_metrics(stat_metrics, all_num_samples, i+1)
 
     # Save server model
-    save_model(server_model, args.dataset, args.model)
+    save_model(server_model, save_path, args.model)
 
     # Close models
     server_model.close()
@@ -115,6 +131,10 @@ def parse_args():
                     help='name of dataset;',
                     type=str,
                     choices=DATASETS,
+                    required=True)
+    parser.add_argument('-save_path',
+                    help='path of checkpoints;',
+                    type=str,
                     required=True)
     parser.add_argument('-model',
                     help='name of model;',
@@ -154,7 +174,10 @@ def parse_args():
                     type=float,
                     default=-1,
                     required=False)
-
+    parser.add_argument('-mom',
+                    help='momentum term;',
+                    type=float,
+                    default=0.,)
     return parser.parse_args()
 
 
@@ -174,10 +197,11 @@ def setup_clients(dataset, model=None):
     return all_clients
 
 
-def save_model(server_model, dataset, model):
+def save_model(server_model, save_path, model):
     """Saves the given server model on checkpoints/dataset/model.ckpt."""
     # Save server model
-    ckpt_path = os.path.join('checkpoints', dataset)
+    #ckpt_path = os.path.join('checkpoints', save_path)
+    ckpt_path = save_path
     if not os.path.exists(ckpt_path):
         os.makedirs(ckpt_path)
     save_path = server_model.save(os.path.join(ckpt_path, '%s.ckpt' % model))
