@@ -12,8 +12,7 @@ import metrics.writer as metrics_writer
 from baseline_constants import MAIN_PARAMS, MODEL_PARAMS, SIM_TIMES
 from client import Client
 from server import Server
-from model import ServerModel
-from model_mom import ServerModel as ServerModel_mom
+from model_prox import ServerModel
 
 from utils.constants import DATASETS
 from utils.model_utils import read_data
@@ -36,7 +35,12 @@ def main():
         os.makedirs(save_path)
     
     print('############################## %s ##############################' % model_path)
-    mod = importlib.import_module(model_path)
+    if args.dataset == 'femnist':
+        tmp_path = "femnist.cnn_prox"
+    else:
+        tmp_path = "shakespeare.stacked_lstm_prox"
+
+    mod = importlib.import_module(tmp_path)
     ClientModel = getattr(mod, 'ClientModel')
 
     tup = MAIN_PARAMS[args.dataset][args.t]
@@ -55,10 +59,7 @@ def main():
         model_params = tuple(model_params_list)
     tf.reset_default_graph()
     client_model = ClientModel(*model_params)
-    if args.mom == 0:
-        server_model = ServerModel(ClientModel(*model_params))
-    else:
-        server_model = ServerModel_mom(ClientModel(*model_params))
+    server_model = ServerModel(ClientModel(*model_params))
 
 
     # Create server

@@ -7,6 +7,7 @@ import sys
 import tensorflow as tf
 import time
 
+from pgd import PerturbedGradientDescent
 from baseline_constants import ACCURACY_KEY, LOSS_KEY
 
 from utils.model_utils import batch_data
@@ -48,8 +49,7 @@ class Model(ABC):
     @property
     def optimizer(self):
         """Optimizer to be used by the model."""
-        if self._optimizer is None:
-            self._optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.lr)
+        self._optimizer = PerturbedGradientDescent(learning_rate=self.lr)
 
         return self._optimizer
 
@@ -119,7 +119,7 @@ class Model(ABC):
                     
         with self.graph.as_default():
             update = [self.sess.run(v) for v in tf.trainable_variables()]
-            update = [np.subtract(update[i], init_values[i]) for i in range(len(update))]
+            #update = [np.subtract(update[i], init_values[i]) for i in range(len(update))]
         comp = num_epochs * len(batched_y) * batch_size * self.flops
         return comp, update
 
@@ -173,11 +173,13 @@ class ServerModel:
             clients: list of Client objects
         """
         var_vals = {}
+        tmp_vals = []
         with self.model.graph.as_default():
             all_vars = tf.trainable_variables()
             for v in all_vars:
                 val = self.model.sess.run(v)
                 var_vals[v.name] = val
+                tmp_vals.append(val)
 
         for c in clients:
             c.model.init_vals = var_vals
@@ -185,6 +187,10 @@ class ServerModel:
                 all_vars = tf.trainable_variables()
                 for v in all_vars:
                     v.load(var_vals[v.name], c.model.sess)
+
+            with c.model.graph.as_default():
+                c.model._optimizer.set_params(tmp_vals, c.model)
+
 
     def update(self, updates):
         """Updates server model using given client updates.
@@ -208,7 +214,8 @@ class ServerModel:
             all_vars = tf.trainable_variables()
             for i, v in enumerate(all_vars):
                 init_val = self.model.sess.run(v)
-                v.load(np.add(init_val, weighted_updates[i]), self.model.sess)
+                #v.load(np.add(init_val, weighted_updates[i]), self.model.sess)
+                v.load(weighted_updates[i], self.model.sess)
 
     def save(self, path='checkpoints/model.ckpt'):
         return self.model.saver.save(self.model.sess, path)

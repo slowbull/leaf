@@ -1,6 +1,7 @@
 import random
 import warnings
 
+from utils.language_utils import letter_to_vec, word_to_indices
 
 class Client:
     
@@ -10,6 +11,10 @@ class Client:
         self.group = group
         self.train_data = train_data
         self.eval_data = eval_data
+
+        if isinstance(train_data['x'][0], str):
+            self.train_data['x'], self.train_data['y'] = self.process_x(self.train_data['x']), self.process_y(self.train_data['y'])
+            self.eval_data['x'], self.eval_data['y'] = self.process_x(self.eval_data['x']), self.process_y(self.eval_data['y'])
 
     def train(self, num_epochs=1, batch_size=10, minibatch=None):
         """Trains on self.model using the client's train_data.
@@ -62,3 +67,11 @@ class Client:
         warnings.warn('The current implementation shares the model among all clients.'
                       'Setting it on one client will effectively modify all clients.')
         self._model = model
+
+    def process_x(self, raw_x_batch):
+        x_batch = [word_to_indices(word) for word in raw_x_batch]
+        return x_batch
+
+    def process_y(self, raw_y_batch):
+        y_batch = [letter_to_vec(c) for c in raw_y_batch]
+        return y_batch

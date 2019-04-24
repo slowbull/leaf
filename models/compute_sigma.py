@@ -7,25 +7,27 @@ import os
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-save_path', help='saved path;', type=str, required=True)
-    parser.add_argument('--num-rounds', help='number of rounds;', type=int, default=1000)
+    parser.add_argument('--num-rounds', help='number of rounds;', type=int, default=2000)
+    parser.add_argument('--target', help='target point round;', type=int, default=2000)
     parser.add_argument('--eval-every', help='evaluate every ____ rounds;', type=int, default=100)
 
     args = parser.parse_args()
 
+    parent_path = os.path.join('/dataset/hzy/FedLearning/result/checkpoints', args.save_path)
 
-    file_path = os.path.join('checkpoints', args.save_path, 'model_'+str(args.num_rounds-1))
+    file_path = os.path.join(parent_path, 'model_'+str(args.target))
     with open(file_path, 'rb') as f:
         target = pickle.load(f)
 
     print('Rounds  fedavg   fedsgd   fedavg-fedsgd  gradnorm')
-    for i in range(0, args.num_rounds, args.eval_every):
-        file_path = os.path.join('checkpoints', args.save_path, 'fedavg_'+str(i))
+    for k in range(0, args.num_rounds, args.eval_every):
+        file_path = os.path.join(parent_path, 'fedavg_'+str(k))
         with open(file_path, 'rb') as f:
             fedavg_updates = pickle.load(f)
-        file_path = os.path.join('checkpoints', args.save_path, 'fedsgd_'+str(i))
+        file_path = os.path.join(parent_path, 'fedsgd_'+str(k))
         with open(file_path, 'rb') as f:
             fedsgd_updates = pickle.load(f)
-        file_path = os.path.join('checkpoints', args.save_path, 'model_'+str(i))
+        file_path = os.path.join(parent_path, 'model_'+str(k))
         with open(file_path, 'rb') as f:
             model = pickle.load(f)
 
@@ -50,7 +52,7 @@ def main():
             diff_sigma += np.sum(np.multiply(fedavg[i][1]-fedsgd[i][1], -model[i]+target[i]))
             grad_l2 += np.linalg.norm(fedsgd[i])
 
-        print('{:03d}  {:.4f}  {:.4f}   {:.4f}  {:.4f}'.format(i, fedavg_sigma, fedsgd_sigma, diff_sigma, grad_l2))
+        print('{:03d}  {:.4f}  {:.4f}   {:.4f}  {:.4f}'.format(k, fedavg_sigma, fedsgd_sigma, diff_sigma, grad_l2))
        
 
 

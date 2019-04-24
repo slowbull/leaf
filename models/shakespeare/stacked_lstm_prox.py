@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from tensorflow.contrib import rnn
 
-from model import Model
+from model_prox import Model
 from utils.language_utils import letter_to_vec, word_to_indices
 
 class ClientModel(Model):
