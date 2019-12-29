@@ -25,7 +25,7 @@ class Model(ABC):
 
         self.graph = tf.Graph()
         with self.graph.as_default():
-            self.features, self.labels, self.is_train, self.train_op, self.eval_metric_ops, self.loss = self.create_model()
+            self.features, self.labels, self.is_train, self.train_op, self.eval_metric_ops, self.loss, self.var_grad = self.create_model()
             self.saver = tf.train.Saver()
 
         config = tf.ConfigProto()
@@ -90,10 +90,14 @@ class Model(ABC):
         with self.graph.as_default():
             init_values = [self.sess.run(v) for v in tf.trainable_variables()]
 
+        delta_values = [np.zeros(np.shape(init_values[i])) for i in range(len(init_values))]
+
         batched_x, batched_y = batch_data(data, batch_size)
         #run_metadata = tf.RunMetadata()
+        cnt = 0
         for _ in range(num_epochs):
             for i, raw_x_batch in enumerate(batched_x):
+                cnt += 1
                 input_data = self.process_x(raw_x_batch)
                 raw_y_batch = batched_y[i]
                 target_data = self.process_y(raw_y_batch)
@@ -120,7 +124,9 @@ class Model(ABC):
         with self.graph.as_default():
             update = [self.sess.run(v) for v in tf.trainable_variables()]
             update = [np.subtract(update[i], init_values[i]) for i in range(len(update))]
+
         comp = num_epochs * len(batched_y) * batch_size * self.flops
+
         return comp, update
 
     def test(self, data):

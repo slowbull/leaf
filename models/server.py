@@ -83,6 +83,7 @@ class Server:
             pickle.dump(init_values, f)
 
 
+
     def test_model(self, clients_to_test=None):
         """Tests self.model on given clients.
 

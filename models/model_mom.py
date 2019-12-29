@@ -20,7 +20,8 @@ class Model(ABC):
 
         self.graph = tf.Graph()
         with self.graph.as_default():
-            self.features, self.labels, self.is_train, self.train_op, self.eval_metric_ops, self.loss = self.create_model()
+            self.features, self.labels, self.is_train, self.train_op, self.eval_metric_ops, self.loss, self.var_grad = self.create_model()
+            #self.features, self.labels, self.is_train, self.train_op, self.eval_metric_ops, self.loss = self.create_model()
             self.saver = tf.train.Saver()
 
         config = tf.ConfigProto()
@@ -80,23 +81,38 @@ class Model(ABC):
 
         with self.graph.as_default():
             init_values = [self.sess.run(v) for v in tf.trainable_variables()]
+            delta_values = [np.zeros(np.shape(init_values[i])) for i in range(len(init_values))]
 
         batched_x, batched_y = batch_data(data, batch_size)
+        cnt = 0
+        sum_samples = 0
         for _ in range(num_epochs):
             for i, raw_x_batch in enumerate(batched_x):
                 input_data = self.process_x(raw_x_batch)
                 raw_y_batch = batched_y[i]
                 target_data = self.process_y(raw_y_batch)
                 with self.graph.as_default():
-                    self.sess.run(
-                        self.train_op,
-						feed_dict={self.features: input_data, self.labels: target_data, self.is_train:True}
+                    _, var_grad =self.sess.run(
+                        [self.train_op, self.var_grad],
+		    				feed_dict={self.features: input_data, self.labels: target_data, self.is_train:True}
                     )
+                    #self.sess.run(
+                    #    self.train_op,
+		    #feed_dict={self.features: input_data, self.labels: target_data, self.is_train:True}
+                    #)
+                    delta_values = [np.add(delta_values[i], pow(self.gamma, cnt)*var_grad[i]) for i in range(len(var_grad))]
+                sum_samples += pow(self.gamma, cnt)
+                cnt += 1
+
         with self.graph.as_default():
             update = [self.sess.run(v) for v in tf.trainable_variables()]
             update = [np.subtract(update[i], init_values[i]) for i in range(len(update))]
-        comp = num_epochs * len(batched_y) * batch_size * self.flops
-        return comp, update
+            delta_values = [-delta_values[i]/sum_samples*cnt for i in range(len(delta_values))]
+
+        #comp = num_epochs * len(batched_y) * batch_size * self.flops
+        comp = num_epochs * len(batched_y) * batch_size
+        #return comp, update
+        return comp, delta_values
 
     def test(self, data):
         """
@@ -128,14 +144,18 @@ class Model(ABC):
         """Pre-processes each batch of labels before being fed to the model."""
         return np.asarray(raw_y_batch)
 
+    def setup_gamma(self, gamma):
+        self.gamma = gamma
 
 class ServerModel:
-    def __init__(self, model):
+    def __init__(self, model, eta=0.01, beta=0.9):
         self.model = model
+        self.eta = eta
+        self.beta = beta
 
         with self.model.graph.as_default():
-            self.mom_prev = [self.model.sess.run(v) for v in tf.trainable_variables()] 
-            self.mom_cur = [self.model.sess.run(v) for v in tf.trainable_variables()] 
+            self.mom_prev = [np.zeros_like(self.model.sess.run(v)) for v in tf.trainable_variables()] 
+            self.mom_cur = [np.zeros_like(self.model.sess.run(v)) for v in tf.trainable_variables()] 
 
     @property
     def size(self):
@@ -174,6 +194,8 @@ class ServerModel:
                 is a list of variable weights
         """
         tot_samples = np.sum([u[0] for u in updates])
+        eta = self.eta
+        beta = self.beta
 
         weighted_vals = [np.zeros(np.shape(v), dtype=float) for v in updates[0][1]]
 
@@ -181,7 +203,7 @@ class ServerModel:
             for j, weighted_val in enumerate(weighted_vals):
                 weighted_vals[j] = np.add(weighted_val, update[0] * update[1][j])
 
-        weighted_updates = [v / tot_samples for v in weighted_vals]
+        weighted_updates = [v/tot_samples*eta for v in weighted_vals]
 
         with self.model.graph.as_default():
             all_vars = tf.trainable_variables()
@@ -193,7 +215,7 @@ class ServerModel:
             all_vars = tf.trainable_variables()
             for i, v in enumerate(all_vars):
                 init_val = self.model.sess.run(v)
-                v.load(np.add(self.mom_cur[i], 0.9*(self.mom_cur[i]-self.mom_prev[i])), self.model.sess)
+                v.load(np.add(self.mom_cur[i], beta*(self.mom_cur[i]-self.mom_prev[i])), self.model.sess)
 
         for i, v in enumerate(self.mom_cur):
             self.mom_prev[i] = self.mom_cur[i]
@@ -208,3 +230,9 @@ class ServerModel:
         with self.model.graph.as_default():
             init_values = [self.model.sess.run(v) for v in tf.trainable_variables()] 
         return init_values
+
+    def setup(self, all_num_samples):
+        self.total_num = 0
+        for key, val in all_num_samples.items():
+            self.total_num = self.total_num + val
+

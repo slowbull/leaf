@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from model import Model
+from model_mom import Model
 
 
 IMAGE_SIZE = 28
